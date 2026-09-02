@@ -22,6 +22,7 @@ PACKAGES = {
     "plan_730": {"name": "២ ឆ្នាំ", "days": 730, "price": "20$", "qr": "qr_2y.jpg"},
 }
 
+# Web Server សម្រាប់ឆ្លើយតប Render Web Service Port
 class SimpleHealthCheckHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
@@ -140,7 +141,7 @@ def execute_code(language: str, code: str) -> str:
         "files": [{"content": code}]
     }
     try:
-        res = requests.post(url, json=payload, timeout=25)
+        res = requests.post(url, json=payload, timeout=20)
         data = res.json()
         output = data.get("run", {}).get("output", "")
         return output if output else "កូដដំណើរការជោគជ័យ (គ្មានលទ្ធផលបង្ហាញ)"
@@ -176,12 +177,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if is_vip(user_id):
         await update.message.reply_text(
             "👋 **សូមស្វាគមន៍មកកាន់ប្រព័ន្ធដំណើរការកូដ!**\n\n"
-            "លោកអ្នកជាសមាជិក VIP រួចរាល់ហើយ។ សូមផ្ញើជាអត្ថបទកូដ ឬផ្ញើជា File កូដ (`.py`, `.js`, `.php`...) មកកាន់ទីនេះ ដើម្បីដំណើរការ។",
+            "លោកអ្នកជាសមាជិក VIP រួចរាល់ហើយ។ សូមផ្ញើអត្ថបទកូដ ឬផ្ញើជា **ឯកសារកូដ (File .py, .js, .php...)** ចូលមកទីនេះដើម្បីដំណើរការ។",
             parse_mode="Markdown"
         )
     else:
         await send_plan_selection(update, user_id)
 
+# ទទួលកូដជាប្រភេទអត្ថបទ (Text)
 async def handle_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     record_user(user_id)
@@ -190,9 +192,21 @@ async def handle_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     context.user_data['code'] = update.message.text
-    await prompt_execution(update)
 
-# មុខងារទទួល File ឯកសារ (.py, .js, .txt ជាដើម)
+    keyboard = [
+        [
+            InlineKeyboardButton("▶️ ដំណើរការកូដ", callback_data="action_run_code"),
+            InlineKeyboardButton("⏹️ បញ្ឈប់ដំណើរការកូដ", callback_data="action_stop_code")
+        ]
+    ]
+    await update.message.reply_text(
+        "📥 **ទទួលបានកូដរបស់អ្នករួចរាល់ហើយ!**\n\n"
+        "សូមចុចប៊ូតុងខាងក្រោមដើម្បីជ្រើសរើសដំណើរការ ឬបញ្ឈប់៖",
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode="Markdown"
+    )
+
+# ទទួលកូដជាប្រភេទឯកសារ (Document / File)
 async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     record_user(user_id)
@@ -201,30 +215,38 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     doc = update.message.document
-    file = await context.bot.get_file(doc.file_id)
-    file_bytes = await file.download_as_bytearray()
+    file_name = doc.file_name or "code_file"
+    
+    # ពិនិត្យមើលទំហំឯកសារ (កុំឱ្យលើសពី 5MB)
+    if doc.file_size and doc.file_size > 5 * 1024 * 1024:
+        await update.message.reply_text("⚠️ **ឯកសារនេះមានទំហំធំពេក!** សូមផ្ញើឯកសារកូដដែលមានទំហំតូចជាង 5MB។")
+        return
+
+    status_msg = await update.message.reply_text(f"⏳ កំពុងទាញយកឯកសារកូដ `{file_name}`...")
     
     try:
-        code_text = file_bytes.decode('utf-8')
-        context.user_data['code'] = code_text
-        await update.message.reply_text(f"📄 **ទទួលបានឯកសារកូដ៖** `{doc.file_name}` រួចរាល់ហើយ!", parse_mode="Markdown")
-        await prompt_execution(update)
-    except Exception:
-        await update.message.reply_text("❌ មិនអាចអានឯកសារនេះបានទេ សូមប្រាកដថាវាជា Text/Script File។")
+        tg_file = await context.bot.get_file(doc.file_id)
+        downloaded_bytes = await tg_file.download_as_bytearray()
+        code_content = downloaded_bytes.decode('utf-8', errors='ignore')
+        
+        context.user_data['code'] = code_content
 
-async def prompt_execution(update: Update):
-    keyboard = [
-        [
-            InlineKeyboardButton("▶️ ដំណើរការកូដ", callback_data="action_run_code"),
-            InlineKeyboardButton("⏹️ បញ្ឈប់ដំណើរការកូដ", callback_data="action_stop_code")
+        keyboard = [
+            [
+                InlineKeyboardButton("▶️ ដំណើរការកូដ", callback_data="action_run_code"),
+                InlineKeyboardButton("⏹️ បញ្ឈប់ដំណើរការកូដ", callback_data="action_stop_code")
+            ]
         ]
-    ]
-    await update.message.reply_text(
-        "📥 **កូដត្រូវបានបញ្ចូលក្នុងប្រព័ន្ធរួចរាល់!**\n\nសូមចុចប៊ូតុងខាងក្រោមដើម្បីជ្រើសរើសដំណើរការ ឬបញ្ឈប់៖",
-        reply_markup=InlineKeyboardMarkup(keyboard),
-        parse_mode="Markdown"
-    )
+        await status_msg.edit_text(
+            f"📄 **ទទួលបានឯកសារកូដ៖** `{file_name}` រួចរាល់ហើយ!\n\n"
+            "សូមចុចប៊ូតុងខាងក្រោមដើម្បីជ្រើសរើសដំណើរការ ឬបញ្ឈប់៖",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode="Markdown"
+        )
+    except Exception as e:
+        await status_msg.edit_text(f"❌ មិនអាចអានឯកសារនេះបានទេ៖ {str(e)}")
 
+# ទទួលរូបភាពវិក្កយបត្របង់ប្រាក់
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     record_user(user.id)
@@ -272,7 +294,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.edit_message_text(
                 f"🎉 **អបអរសាទរ! លោកអ្នកទទួលបានសិទ្ធិប្រើប្រាស់ Free រយៈពេល ១ ថ្ងៃជោគជ័យ!**\n\n"
                 f"⏰ ផុតកំណត់នៅវេលាម៉ោង៖ `{expire_time}`\n\n"
-                "👉 ឥឡូវនេះ លោកអ្នកអាចផ្ញើកូដចូលមកដើម្បីដំណើរការបានភ្លាមៗ!",
+                "👉 ឥឡូវនេះ លោកអ្នកអាចផ្ញើកូដ ឬឯកសារកូដចូលមកដើម្បីដំណើរការបានភ្លាមៗ!",
                 parse_mode="Markdown"
             )
         else:
@@ -439,7 +461,7 @@ if __name__ == "__main__":
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("users", admin_check_users))
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
-    app.add_handler(MessageHandler(filters.Document.ALL, handle_document))  # ទទួល Document/File
+    app.add_handler(MessageHandler(filters.Document.ALL, handle_document))  # ទទួល File ឯកសារកូដ
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_code))
     app.add_handler(CallbackQueryHandler(handle_callback))
 
