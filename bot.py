@@ -22,7 +22,6 @@ PACKAGES = {
     "plan_730": {"name": "២ ឆ្នាំ", "days": 730, "price": "20$", "qr": "qr_2y.jpg"},
 }
 
-# Web Server សម្រាប់ឆ្លើយតប Render Web Service Port
 class SimpleHealthCheckHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
@@ -141,7 +140,7 @@ def execute_code(language: str, code: str) -> str:
         "files": [{"content": code}]
     }
     try:
-        res = requests.post(url, json=payload, timeout=20)
+        res = requests.post(url, json=payload, timeout=25)
         data = res.json()
         output = data.get("run", {}).get("output", "")
         return output if output else "កូដដំណើរការជោគជ័យ (គ្មានលទ្ធផលបង្ហាញ)"
@@ -177,7 +176,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if is_vip(user_id):
         await update.message.reply_text(
             "👋 **សូមស្វាគមន៍មកកាន់ប្រព័ន្ធដំណើរការកូដ!**\n\n"
-            "លោកអ្នកជាសមាជិក VIP រួចរាល់ហើយ។ សូមផ្ញើកូដដែលអ្នកចង់ដំណើរការមកកាន់ទីនេះ (Python, JavaScript, PHP, C++, Java, C#...)",
+            "លោកអ្នកជាសមាជិក VIP រួចរាល់ហើយ។ សូមផ្ញើជាអត្ថបទកូដ ឬផ្ញើជា File កូដ (`.py`, `.js`, `.php`...) មកកាន់ទីនេះ ដើម្បីដំណើរការ។",
             parse_mode="Markdown"
         )
     else:
@@ -191,7 +190,29 @@ async def handle_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     context.user_data['code'] = update.message.text
+    await prompt_execution(update)
 
+# មុខងារទទួល File ឯកសារ (.py, .js, .txt ជាដើម)
+async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    record_user(user_id)
+    if not is_vip(user_id):
+        await send_plan_selection(update, user_id)
+        return
+
+    doc = update.message.document
+    file = await context.bot.get_file(doc.file_id)
+    file_bytes = await file.download_as_bytearray()
+    
+    try:
+        code_text = file_bytes.decode('utf-8')
+        context.user_data['code'] = code_text
+        await update.message.reply_text(f"📄 **ទទួលបានឯកសារកូដ៖** `{doc.file_name}` រួចរាល់ហើយ!", parse_mode="Markdown")
+        await prompt_execution(update)
+    except Exception:
+        await update.message.reply_text("❌ មិនអាចអានឯកសារនេះបានទេ សូមប្រាកដថាវាជា Text/Script File។")
+
+async def prompt_execution(update: Update):
     keyboard = [
         [
             InlineKeyboardButton("▶️ ដំណើរការកូដ", callback_data="action_run_code"),
@@ -199,8 +220,7 @@ async def handle_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ]
     ]
     await update.message.reply_text(
-        "📥 **ទទួលបានកូដរបស់អ្នករួចរាល់ហើយ!**\n\n"
-        "សូមចុចប៊ូតុងខាងក្រោមដើម្បីជ្រើសរើសដំណើរការ ឬបញ្ឈប់៖",
+        "📥 **កូដត្រូវបានបញ្ចូលក្នុងប្រព័ន្ធរួចរាល់!**\n\nសូមចុចប៊ូតុងខាងក្រោមដើម្បីជ្រើសរើសដំណើរការ ឬបញ្ឈប់៖",
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode="Markdown"
     )
@@ -419,6 +439,7 @@ if __name__ == "__main__":
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("users", admin_check_users))
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
+    app.add_handler(MessageHandler(filters.Document.ALL, handle_document))  # ទទួល Document/File
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_code))
     app.add_handler(CallbackQueryHandler(handle_callback))
 
