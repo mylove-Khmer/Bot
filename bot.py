@@ -154,7 +154,9 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
     doc = update.message.document
     file_name = doc.file_name or f"bot_{user_id}.py"
     
-    user_dir = f"hosted_bots/{user_id}"
+    # កំណត់ Absolute Path ត្រឹមត្រូវ កុំឱ្យជាន់ Folder
+    base_dir = os.path.abspath("hosted_bots")
+    user_dir = os.path.join(base_dir, str(user_id))
     os.makedirs(user_dir, exist_ok=True)
     file_path = os.path.join(user_dir, file_name)
 
@@ -247,7 +249,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.edit_message_caption(caption=query.message.caption + "\n\n🔴 **បដិសេធការបង់ប្រាក់**")
         return
 
-    # ចាប់ផ្ដើមដំណើរការ Bot របស់ភ្ញៀវ និងត្រួតពិនិត្យ Error
+    # ចាប់ផ្ដើមដំណើរការ Bot របស់ភ្ញៀវ
     if data == "action_run_bot":
         if not is_vip(user_id):
             await query.edit_message_text("⚠️ សមាជិកភាពរបស់អ្នកបានផុតកំណត់ហើយ!")
@@ -262,8 +264,10 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         try:
             work_dir = os.path.dirname(script_path)
+            script_name = os.path.basename(script_path)
+
             proc = subprocess.Popen(
-                [sys.executable, script_path],
+                [sys.executable, script_name],
                 cwd=work_dir,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
@@ -271,7 +275,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             RUNNING_PROCESSES[user_id] = proc
 
-            # រង់ចាំ ២ វិនាទីដើម្បីត្រួតពិនិត្យថាតើកូដមាន Error ឬរលត់ភ្លាមៗដែរទេ
             time.sleep(2)
             poll = proc.poll()
 
@@ -306,7 +309,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.edit_message_text("ℹ️ មិនមាន Bot ណាមួយកំពុងដំណើរការឡើយ។")
         return
 
-# បញ្ជា /addvip សម្រាប់អេដមីនបើកថ្ងៃឱ្យភ្ញៀវផ្ទាល់
+# បញ្ជា /addvip សម្រាប់អេដមីន
 async def admin_add_vip_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID:
         return
