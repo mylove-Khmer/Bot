@@ -1,5 +1,7 @@
 import os
 import sqlite3
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
 from datetime import datetime, timedelta
 import requests
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -12,13 +14,30 @@ ADMIN_USERNAME = "@KinHav12"[cite: 1, 2]
 ADMIN_CONTACT_LINK = "https://t.me/KinHav12"
 # =========================================================
 
-# តារាងតម្លៃ កញ្ចប់សេវាកម្ម និងឈ្មោះ File រូបភាព QR ដាច់ដោយឡែកពីគ្នា
+# តារាងតម្លៃ កញ្ចប់សេវាកម្ម និងរូបភាព QR ទាំង ៤
 PACKAGES = {
     "plan_30": {"name": "១ ខែ", "days": 30, "price": "2$", "qr": "qr_1m.jpg"},
     "plan_150": {"name": "៥ ខែ", "days": 150, "price": "6$", "qr": "qr_5m.jpg"},
     "plan_365": {"name": "១ ឆ្នាំ", "days": 365, "price": "12$", "qr": "qr_1y.jpg"},
     "plan_730": {"name": "២ ឆ្នាំ", "days": 730, "price": "20$", "qr": "qr_2y.jpg"},
 }
+
+# Web Server តូចមួយសម្រាប់ឆ្លើយតប Health Check របស់ Render
+class SimpleHealthCheckHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header('Content-type', 'text/html; charset=utf-8')
+        self.end_headers()
+        self.wfile.write(b"Bot is alive and running 24/7!")
+
+    def log_message(self, format, *args):
+        return  # បិទ Log កុំឱ្យចង្អៀតផ្ទាំង Render
+
+def run_web_server():
+    port = int(os.environ.get("PORT", 10000))
+    server = HTTPServer(("0.0.0.0", port), SimpleHealthCheckHandler)
+    print(f"Web server កំពុងដំណើរការលើ Port {port} សម្រាប់ Render Health Check...")
+    server.serve_forever()
 
 def init_db():
     conn = sqlite3.connect("subscribers.db")[cite: 1, 2]
@@ -33,7 +52,6 @@ def init_db():
     conn.commit()[cite: 1, 2]
     conn.close()[cite: 1, 2]
 
-# កត់ត្រាភ្ញៀវចូលប្រើប្រព័ន្ធ
 def record_user(user_id: int):
     conn = sqlite3.connect("subscribers.db")[cite: 2]
     cursor = conn.cursor()[cite: 2]
@@ -44,7 +62,6 @@ def record_user(user_id: int):
     conn.commit()[cite: 2]
     conn.close()[cite: 2]
 
-# ពិនិត្យមើលសិទ្ធិ VIP
 def is_vip(user_id: int) -> bool:
     if user_id == ADMIN_ID:[cite: 1, 2]
         return True[cite: 1, 2]
@@ -59,7 +76,6 @@ def is_vip(user_id: int) -> bool:
     expire_date = datetime.strptime(row[0], "%Y-%m-%d %H:%M:%S")[cite: 1, 2]
     return datetime.now() < expire_date[cite: 1, 2]
 
-# បន្ថែមថ្ងៃ VIP
 def add_vip(user_id: int, days: int):
     conn = sqlite3.connect("subscribers.db")[cite: 1, 2]
     cursor = conn.cursor()[cite: 1, 2]
@@ -83,7 +99,6 @@ def add_vip(user_id: int, days: int):
     conn.close()[cite: 1, 2]
     return new_expire.strftime("%Y-%m-%d %H:%M")
 
-# មុខងារបើក Free ១ ថ្ងៃ
 def claim_free_trial(user_id: int):
     conn = sqlite3.connect("subscribers.db")
     cursor = conn.cursor()
@@ -107,7 +122,6 @@ def claim_free_trial(user_id: int):
     conn.close()
     return True, expire_date.strftime("%Y-%m-%d %H:%M")
 
-# ស្ថិតិចំនួនអ្នកប្រើប្រាស់
 def get_user_stats():
     conn = sqlite3.connect("subscribers.db")[cite: 2]
     cursor = conn.cursor()[cite: 2]
@@ -120,7 +134,6 @@ def get_user_stats():
     conn.close()[cite: 2]
     return total_users, active_vip[cite: 2]
 
-# ដំណើរការកូដតាម Piston API
 def execute_code(language: str, code: str) -> str:
     url = "https://emkc.org/api/v2/piston/execute"[cite: 1, 2]
     payload = {
@@ -136,12 +149,9 @@ def execute_code(language: str, code: str) -> str:
     except Exception as e:
         return f"កំហុសបច្ចេកទេស៖ {str(e)}"
 
-# បង្ហាញប៊ូតុងកញ្ចប់តម្លៃ
 async def send_plan_selection(update: Update, user_id: int):
     keyboard = [
-        [
-            InlineKeyboardButton("🎁 សាកល្បងឥតគិតថ្លៃ ១ ថ្ងៃ (Free 1 Day)", callback_data="claim_free_trial")
-        ],
+        [InlineKeyboardButton("🎁 សាកល្បងឥតគិតថ្លៃ ១ ថ្ងៃ (Free 1 Day)", callback_data="claim_free_trial")],
         [
             InlineKeyboardButton("📦 ១ ខែ (តម្លៃ ២$)", callback_data="buy_plan_30"),
             InlineKeyboardButton("🔥 ៥ ខែ (តម្លៃ ៦$)", callback_data="buy_plan_150")
@@ -150,9 +160,7 @@ async def send_plan_selection(update: Update, user_id: int):
             InlineKeyboardButton("🔥 ១ ឆ្នាំ (តម្លៃ ១២$)", callback_data="buy_plan_365"),
             InlineKeyboardButton("🔥 ២ ឆ្នាំ (តម្លៃ ២០$)", callback_data="buy_plan_730")
         ],
-        [
-            InlineKeyboardButton("💬 ទំនាក់ទំនងអេដមីន (Contact Admin)", url=ADMIN_CONTACT_LINK)
-        ]
+        [InlineKeyboardButton("💬 ទំនាក់ទំនងអេដមីន (Contact Admin)", url=ADMIN_CONTACT_LINK)]
     ]
     text = (
         "⚠️ **គណនីរបស់អ្នកមិនទាន់មានកញ្ចប់សេវាកម្មនៅឡើយទេ!**\n\n"
@@ -176,7 +184,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await send_plan_selection(update, user_id)[cite: 2]
 
-# នៅពេលភ្ញៀវផ្ញើកូដចូលមក
 async def handle_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id[cite: 1, 2]
     record_user(user_id)[cite: 2]
@@ -199,7 +206,6 @@ async def handle_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode="Markdown"
     )
 
-# ទទួលរូបភាពវិក្កយបត្រ
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user[cite: 1, 2]
     record_user(user.id)[cite: 2]
@@ -215,9 +221,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             InlineKeyboardButton("🔥 យល់ព្រម ១ ឆ្នាំ (១២$)", callback_data=f"adm_approve_{user.id}_365"),
             InlineKeyboardButton("🔥 យល់ព្រម ២ ឆ្នាំ (២០$)", callback_data=f"adm_approve_{user.id}_730")
         ],
-        [
-            InlineKeyboardButton("❌ បដិសេធ / បោះបង់", callback_data=f"adm_reject_{user.id}_0")
-        ]
+        [InlineKeyboardButton("❌ បដិសេធ / បោះបង់", callback_data=f"adm_reject_{user.id}_0")]
     ]
 
     await context.bot.send_photo(
@@ -243,7 +247,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id[cite: 1, 2]
     await query.answer()[cite: 1, 2]
 
-    # ភ្ញៀវចុចយក Free Trial ១ ថ្ងៃ
     if data == "claim_free_trial":
         success, expire_time = claim_free_trial(user_id)
         if success:
@@ -261,7 +264,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await send_plan_selection(update, user_id)[cite: 2]
         return
 
-    # ភ្ញៀវចុចជ្រើសរើសកញ្ចប់ -> បង្ហាញរូបភាព QR តាមកញ្ចប់នោះ
     if data.startswith("buy_"):[cite: 2]
         plan_key = data.replace("buy_", "")[cite: 2]
         plan = PACKAGES.get(plan_key)[cite: 2]
@@ -275,12 +277,10 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "📲 សូម Scan រូបភាព QR Code ខាងលើដើម្បីទូទាត់ប្រាក់។\n"
                 "📸 **ចំណាំ៖** ក្រោយផ្ទេរប្រាក់រួច សូមផ្ញើរូបភាពវិក្កយបត្រ (Slip) ចូលមកកាន់ទីនេះ ដើម្បីឱ្យអេដមីនបើកសិទ្ធិជូនភ្លាមៗ!"
             )
-            keyboard = [
-                [InlineKeyboardButton("💬 ទំនាក់ទំនងអេដមីនផ្ទាល់", url=ADMIN_CONTACT_LINK)]
-            ]
+            keyboard = [[InlineKeyboardButton("💬 ទំនាក់ទំនងអេដមីនផ្ទាល់", url=ADMIN_CONTACT_LINK)]]
             reply_markup = InlineKeyboardMarkup(keyboard)
             chat_id = query.message.chat_id[cite: 2]
-            qr_file = plan["qr"]  # យករូបភាពដែលត្រូវគ្នានឹងកញ្ចប់នោះ
+            qr_file = plan["qr"]
 
             if os.path.exists(qr_file):
                 with open(qr_file, "rb") as photo:
@@ -289,7 +289,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await context.bot.send_message(chat_id=chat_id, text=caption, parse_mode="Markdown", reply_markup=reply_markup)[cite: 2]
         return[cite: 2]
 
-    # ផ្នែកគ្រប់គ្រងរបស់ Admin
     if data.startswith("adm_"):[cite: 1, 2]
         if user_id != ADMIN_ID:[cite: 1, 2]
             await query.answer("អ្នកមិនមែនជាអេដមីនទេ!", show_alert=True)[cite: 1, 2]
@@ -333,13 +332,11 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 pass[cite: 1, 2]
         return[cite: 1, 2]
 
-    # ភ្ញៀវចុច "⏹️ បញ្ឈប់ដំណើរការកូដ"
     if data == "action_stop_code":
         context.user_data.pop('code', None)
         await query.edit_message_text("⏹️ **កូដត្រូវបានបញ្ឈប់ និងលុបចេញពីប្រព័ន្ធដោយជោគជ័យ!**", parse_mode="Markdown")
         return
 
-    # ភ្ញៀវចុច "▶️ ដំណើរការកូដ"
     if data == "action_run_code":
         if not is_vip(user_id):[cite: 1, 2]
             await query.edit_message_text("⚠️ **សមាជិកភាពរបស់អ្នកបានផុតកំណត់ហើយ!**\nសូមទាក់ទងអេដមីន ឬជ្រើសរើសកញ្ចប់ថ្មី។")
@@ -358,9 +355,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 InlineKeyboardButton("☕ Java", callback_data="run_java"),[cite: 1, 2]
                 InlineKeyboardButton("🔷 C#", callback_data="run_csharp")[cite: 1, 2]
             ],
-            [
-                InlineKeyboardButton("⏹️ បញ្ឈប់ / បោះបង់", callback_data="action_stop_code")
-            ]
+            [InlineKeyboardButton("⏹️ បញ្ឈប់ / បោះបង់", callback_data="action_stop_code")]
         ]
         await query.edit_message_text(
             "⚡ **សូមជ្រើសរើសភាសាកូដរបស់អ្នកដើម្បីដំណើរការ៖**",
@@ -369,7 +364,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # ដំណើរការ Run កូដជាក់ស្ដែង
     if data.startswith("run_"):[cite: 1, 2]
         if not is_vip(user_id):[cite: 1, 2]
             await query.edit_message_text("⚠️ **សមាជិកភាពរបស់អ្នកបានផុតកំណត់ហើយ!**")
@@ -401,7 +395,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         await query.message.reply_text(result_text, parse_mode="Markdown")[cite: 1, 2]
 
-# បញ្ជា /users សម្រាប់អេដមីនឆែកមើលចំនួនអ្នកប្រើ
 async def admin_check_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID:[cite: 2]
         return[cite: 2]
@@ -419,8 +412,13 @@ async def admin_check_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 if __name__ == "__main__":
     init_db()[cite: 1, 2]
-    app = ApplicationBuilder().token(BOT_TOKEN).build()[cite: 1, 2]
+    
+    # ចាប់ផ្ដើម Web Server លើ Thread ដាច់ដោយឡែកសម្រាប់ឆ្លើយតប Render Web Service
+    web_thread = threading.Thread(target=run_web_server, daemon=True)
+    web_thread.start()
 
+    # ចាប់ផ្ដើមដំណើរការ Telegram Bot
+    app = ApplicationBuilder().token(BOT_TOKEN).build()[cite: 1, 2]
     app.add_handler(CommandHandler("start", start))[cite: 1, 2]
     app.add_handler(CommandHandler("users", admin_check_users))[cite: 2]
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))[cite: 1, 2]
