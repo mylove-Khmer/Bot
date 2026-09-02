@@ -1,5 +1,6 @@
 import os
 import sys
+import time
 import sqlite3
 import threading
 import subprocess
@@ -153,7 +154,6 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
     doc = update.message.document
     file_name = doc.file_name or f"bot_{user_id}.py"
     
-    # បង្កើត Folder សម្រាប់ទុកកូដភ្ញៀវម្នាក់ៗដោយឡែក
     user_dir = f"hosted_bots/{user_id}"
     os.makedirs(user_dir, exist_ok=True)
     file_path = os.path.join(user_dir, file_name)
@@ -247,7 +247,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.edit_message_caption(caption=query.message.caption + "\n\n🔴 **បដិសេធការបង់ប្រាក់**")
         return
 
-    # ចាប់ផ្ដើមដំណើរការ Bot របស់ភ្ញៀវផ្ទាល់នៅលើ Server
+    # ចាប់ផ្ដើមដំណើរការ Bot របស់ភ្ញៀវ និងត្រួតពិនិត្យ Error
     if data == "action_run_bot":
         if not is_vip(user_id):
             await query.edit_message_text("⚠️ សមាជិកភាពរបស់អ្នកបានផុតកំណត់ហើយ!")
@@ -258,26 +258,47 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.edit_message_text("⚠️ មិនមាន File កូដនៅក្នុងប្រព័ន្ធទេ សូមផ្ញើ File ឡើងវិញ។")
             return
 
-        # បិទ Bot ចាស់ចោលសិន ប្រសិនបើមានកំពុងរត់
         stop_user_process(user_id)
 
         try:
-            # បើក Process Python ឱ្យរត់ជា Background
-            proc = subprocess.Popen([sys.executable, script_path])
+            work_dir = os.path.dirname(script_path)
+            proc = subprocess.Popen(
+                [sys.executable, script_path],
+                cwd=work_dir,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True
+            )
             RUNNING_PROCESSES[user_id] = proc
 
-            keyboard = [[InlineKeyboardButton("⏹️ បញ្ឈប់ដំណើរការ Bot (Stop)", callback_data="action_stop_bot")]]
-            await query.edit_message_text(
-                "🚀 **Bot របស់អ្នកកំពុងចាប់ផ្ដើមដំណើរការ ២៤ ម៉ោងនៅលើ Server ហើយ!**\n\n"
-                "👉 សូមចូលទៅកាន់ Bot របស់អ្នកក្នុង Telegram រួចសាកល្បងវាយ `/start` ដើម្បីប្រើប្រាស់។",
-                reply_markup=InlineKeyboardMarkup(keyboard),
-                parse_mode="Markdown"
-            )
+            # រង់ចាំ ២ វិនាទីដើម្បីត្រួតពិនិត្យថាតើកូដមាន Error ឬរលត់ភ្លាមៗដែរទេ
+            time.sleep(2)
+            poll = proc.poll()
+
+            if poll is not None:
+                _, stderr = proc.communicate()
+                error_msg = stderr.strip() if stderr else "កូដបានបិទបញ្ចប់ភ្លាមៗ (Process exited)"
+                if len(error_msg) > 3000:
+                    error_msg = error_msg[-3000:]
+                
+                await query.edit_message_text(
+                    f"❌ **Bot របស់លោកអ្នកមិនអាចដំណើរការបានទេដោយសារជាប់ Error ដូចខាងក្រោម៖**\n\n"
+                    f"```text\n{error_msg}\n```\n"
+                    "👉 សូមពិនិត្យមើលបញ្ហាខ្វះ Library ឬ Token ក្នុងកូដឡើងវិញ!",
+                    parse_mode="Markdown"
+                )
+            else:
+                keyboard = [[InlineKeyboardButton("⏹️ បញ្ឈប់ដំណើរការ Bot (Stop)", callback_data="action_stop_bot")]]
+                await query.edit_message_text(
+                    "🚀 **Bot របស់អ្នកកំពុងដំណើរការ ២៤ ម៉ោងនៅលើ Server ហើយ!**\n\n"
+                    "👉 សូមចូលទៅកាន់ Bot របស់អ្នកក្នុង Telegram រួចសាកល្បងវាយ `/start` ដើម្បីប្រើប្រាស់។",
+                    reply_markup=InlineKeyboardMarkup(keyboard),
+                    parse_mode="Markdown"
+                )
         except Exception as e:
-            await query.edit_message_text(f"❌ មិនអាចដំណើរការ Bot បានទេ៖ {str(e)}")
+            await query.edit_message_text(f"❌ កំហុសប្រព័ន្ធ៖ {str(e)}")
         return
 
-    # បញ្ឈប់ Bot របស់ភ្ញៀវ
     if data == "action_stop_bot":
         if stop_user_process(user_id):
             await query.edit_message_text("⏹️ **Bot របស់អ្នកត្រូវបានបញ្ឈប់ដំណើរការ (Offline) ដោយជោគជ័យ!**", parse_mode="Markdown")
@@ -285,12 +306,27 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.edit_message_text("ℹ️ មិនមាន Bot ណាមួយកំពុងដំណើរការឡើយ។")
         return
 
+# បញ្ជា /addvip សម្រាប់អេដមីនបើកថ្ងៃឱ្យភ្ញៀវផ្ទាល់
+async def admin_add_vip_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id != ADMIN_ID:
+        return
+    try:
+        args = context.args
+        target_id = int(args[0])
+        days = int(args[1])
+        new_exp = add_vip(target_id, days)
+        await update.message.reply_text(f"✅ បានបន្ថែម VIP ជូន ID `{target_id}` ចំនួន {days} ថ្ងៃជោគជ័យ!\n📅 ផុតកំណត់៖ {new_exp}", parse_mode="Markdown")
+        await context.bot.send_message(chat_id=target_id, text=f"🎉 **គណនីរបស់អ្នកត្រូវបានបន្ថែម VIP ចំនួន {days} ថ្ងៃ!**\n📅 ផុតកំណត់នៅ៖ {new_exp}")
+    except Exception:
+        await update.message.reply_text("❌ ទម្រង់បញ្ជាខុស! សូមប្រើ៖ `/addvip <user_id> <days>`\nឧទាហរណ៍៖ `/addvip 123456789 30`", parse_mode="Markdown")
+
 if __name__ == "__main__":
     init_db()
     threading.Thread(target=run_web_server, daemon=True).start()
 
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("addvip", admin_add_vip_cmd))
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     app.add_handler(MessageHandler(filters.Document.ALL, handle_document))
     app.add_handler(CallbackQueryHandler(handle_callback))
