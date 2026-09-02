@@ -10,15 +10,14 @@ BOT_TOKEN = "8249755354:AAHkrWuCaZN1OMTl8GkAADomLkCoxyBAuX0"[cite: 1, 2]
 ADMIN_ID = 8384547912[cite: 1, 2]
 ADMIN_USERNAME = "@KinHav12"[cite: 1, 2]
 ADMIN_CONTACT_LINK = "https://t.me/KinHav12"
-QR_IMAGE_PATH = "qr.jpg"  # ទីតាំងរូប QR Code[cite: 1, 2]
 # =========================================================
 
-# តារាងតម្លៃ និងកញ្ចប់សេវាកម្ម
+# តារាងតម្លៃ កញ្ចប់សេវាកម្ម និងឈ្មោះ File រូបភាព QR ដាច់ដោយឡែកពីគ្នា
 PACKAGES = {
-    "plan_30": {"name": "១ ខែ", "days": 30, "price": "2$"},[cite: 1, 2]
-    "plan_150": {"name": "៥ ខែ", "days": 150, "price": "6$"},[cite: 1, 2]
-    "plan_365": {"name": "១ ឆ្នាំ", "days": 365, "price": "12$"},[cite: 1, 2]
-    "plan_730": {"name": "២ ឆ្នាំ", "days": 730, "price": "20$"},[cite: 1, 2]
+    "plan_30": {"name": "១ ខែ", "days": 30, "price": "2$", "qr": "qr_1m.jpg"},
+    "plan_150": {"name": "៥ ខែ", "days": 150, "price": "6$", "qr": "qr_5m.jpg"},
+    "plan_365": {"name": "១ ឆ្នាំ", "days": 365, "price": "12$", "qr": "qr_1y.jpg"},
+    "plan_730": {"name": "២ ឆ្នាំ", "days": 730, "price": "20$", "qr": "qr_2y.jpg"},
 }
 
 def init_db():
@@ -84,7 +83,7 @@ def add_vip(user_id: int, days: int):
     conn.close()[cite: 1, 2]
     return new_expire.strftime("%Y-%m-%d %H:%M")
 
-# មុខងារបើក Free ១ ថ្ងៃ (បានតែម្តងគត់)
+# មុខងារបើក Free ១ ថ្ងៃ
 def claim_free_trial(user_id: int):
     conn = sqlite3.connect("subscribers.db")
     cursor = conn.cursor()
@@ -137,7 +136,7 @@ def execute_code(language: str, code: str) -> str:
     except Exception as e:
         return f"កំហុសបច្ចេកទេស៖ {str(e)}"
 
-# បង្ហាញប៊ូតុងកញ្ចប់តម្លៃ ប៊ូតុង Free ១ ថ្ងៃ និងប៊ូតុងទាក់ទងអេដមីន
+# បង្ហាញប៊ូតុងកញ្ចប់តម្លៃ
 async def send_plan_selection(update: Update, user_id: int):
     keyboard = [
         [
@@ -185,10 +184,8 @@ async def handle_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await send_plan_selection(update, user_id)[cite: 2]
         return[cite: 1, 2]
 
-    # រក្សាទុកកូដក្នុង memory បណ្ដោះអាសន្ន
     context.user_data['code'] = update.message.text[cite: 1, 2]
 
-    # បង្ហាញប៊ូតុង "ដំណើរការកូដ" និង "បញ្ឈប់ដំណើរការកូដ"
     keyboard = [
         [
             InlineKeyboardButton("▶️ ដំណើរការកូដ", callback_data="action_run_code"),
@@ -202,20 +199,10 @@ async def handle_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode="Markdown"
     )
 
+# ទទួលរូបភាពវិក្កយបត្រ
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user[cite: 1, 2]
     record_user(user.id)[cite: 2]
-    caption = update.message.caption or ""[cite: 1, 2]
-
-    # អេដមីនប្តូររូប QR
-    if user.id == ADMIN_ID and caption.strip().startswith("/setqr"):[cite: 1, 2]
-        photo = update.message.photo[-1][cite: 1, 2]
-        file = await context.bot.get_file(photo.file_id)[cite: 1, 2]
-        await file.download_to_drive(QR_IMAGE_PATH)[cite: 1, 2]
-        await update.message.reply_text("✅ **បានផ្លាស់ប្តូររូបភាព QR Code បង់ប្រាក់ជោគជ័យ!**", parse_mode="Markdown")
-        return[cite: 1, 2]
-
-    # ភ្ញៀវផ្ញើរូបវិក្កយបត្រ
     photo = update.message.photo[-1][cite: 1, 2]
     selected_plan = context.user_data.get("selected_plan", "មិនបានបញ្ជាក់")
 
@@ -274,7 +261,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await send_plan_selection(update, user_id)[cite: 2]
         return
 
-    # ភ្ញៀវចុចជ្រើសរើសកញ្ចប់ទិញ
+    # ភ្ញៀវចុចជ្រើសរើសកញ្ចប់ -> បង្ហាញរូបភាព QR តាមកញ្ចប់នោះ
     if data.startswith("buy_"):[cite: 2]
         plan_key = data.replace("buy_", "")[cite: 2]
         plan = PACKAGES.get(plan_key)[cite: 2]
@@ -285,20 +272,21 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"💰 **ចំនួនទឹកប្រាក់ត្រូវផ្ទេរ៖ {plan['price']}**\n"
                 f"⏳ **រយៈពេលប្រើប្រាស់៖ {plan['days']} ថ្ងៃ**\n"
                 f"🆔 **លេខសម្គាល់របស់អ្នក (ID)៖** `{user_id}`\n\n"
-                "📲 សូមធ្វើការ Scan រូបភាព QR Code ខាងលើដើម្បីទូទាត់ប្រាក់។\n"
-                "📸 **ចំណាំ៖** ក្រោយផ្ទេរប្រាក់រួច សូមផ្ញើរូបភាពវិក្កយបត្រចូលមកកាន់ទីនេះ ដើម្បីឱ្យអេដមីនបើកសិទ្ធិជូនភ្លាមៗ!"
+                "📲 សូម Scan រូបភាព QR Code ខាងលើដើម្បីទូទាត់ប្រាក់។\n"
+                "📸 **ចំណាំ៖** ក្រោយផ្ទេរប្រាក់រួច សូមផ្ញើរូបភាពវិក្កយបត្រ (Slip) ចូលមកកាន់ទីនេះ ដើម្បីឱ្យអេដមីនបើកសិទ្ធិជូនភ្លាមៗ!"
             )
             keyboard = [
                 [InlineKeyboardButton("💬 ទំនាក់ទំនងអេដមីនផ្ទាល់", url=ADMIN_CONTACT_LINK)]
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
-
             chat_id = query.message.chat_id[cite: 2]
-            if os.path.exists(QR_IMAGE_PATH):[cite: 2]
-                with open(QR_IMAGE_PATH, "rb") as photo:[cite: 2]
+            qr_file = plan["qr"]  # យករូបភាពដែលត្រូវគ្នានឹងកញ្ចប់នោះ
+
+            if os.path.exists(qr_file):
+                with open(qr_file, "rb") as photo:
                     await context.bot.send_photo(chat_id=chat_id, photo=photo, caption=caption, parse_mode="Markdown", reply_markup=reply_markup)
             else:
-                await context.bot.send_message(chat_id=chat_id, text=caption, parse_mode="Markdown", reply_markup=reply_markup)
+                await context.bot.send_message(chat_id=chat_id, text=caption, parse_mode="Markdown", reply_markup=reply_markup)[cite: 2]
         return[cite: 2]
 
     # ផ្នែកគ្រប់គ្រងរបស់ Admin
@@ -351,7 +339,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("⏹️ **កូដត្រូវបានបញ្ឈប់ និងលុបចេញពីប្រព័ន្ធដោយជោគជ័យ!**", parse_mode="Markdown")
         return
 
-    # ភ្ញៀវចុច "▶️ ដំណើរការកូដ" -> បង្ហាញប៊ូតុងជ្រើសរើសភាសា
+    # ភ្ញៀវចុច "▶️ ដំណើរការកូដ"
     if data == "action_run_code":
         if not is_vip(user_id):[cite: 1, 2]
             await query.edit_message_text("⚠️ **សមាជិកភាពរបស់អ្នកបានផុតកំណត់ហើយ!**\nសូមទាក់ទងអេដមីន ឬជ្រើសរើសកញ្ចប់ថ្មី។")
@@ -381,7 +369,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # ភ្ញៀវចុចជ្រើសរើសភាសាដើម្បី Run កូដជាក់ស្ដែង
+    # ដំណើរការ Run កូដជាក់ស្ដែង
     if data.startswith("run_"):[cite: 1, 2]
         if not is_vip(user_id):[cite: 1, 2]
             await query.edit_message_text("⚠️ **សមាជិកភាពរបស់អ្នកបានផុតកំណត់ហើយ!**")
@@ -429,25 +417,12 @@ async def admin_check_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     await update.message.reply_text(msg, parse_mode="Markdown")[cite: 2]
 
-# បញ្ជា /setqr សម្រាប់អេដមីន
-async def admin_set_qr_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != ADMIN_ID:[cite: 1, 2]
-        return[cite: 1, 2]
-    if update.message.reply_to_message and update.message.reply_to_message.photo:[cite: 1, 2]
-        photo = update.message.reply_to_message.photo[-1][cite: 1, 2]
-        file = await context.bot.get_file(photo.file_id)[cite: 1, 2]
-        await file.download_to_drive(QR_IMAGE_PATH)[cite: 1, 2]
-        await update.message.reply_text("✅ **បានផ្លាស់ប្តូររូបភាព QR Code បង់ប្រាក់ជោគជ័យ!**", parse_mode="Markdown")
-    else:
-        await update.message.reply_text("❌ សូម Reply លើរូបភាព QR Code រួចវាយពាក្យ `/setqr`", parse_mode="Markdown")
-
 if __name__ == "__main__":
     init_db()[cite: 1, 2]
     app = ApplicationBuilder().token(BOT_TOKEN).build()[cite: 1, 2]
 
     app.add_handler(CommandHandler("start", start))[cite: 1, 2]
     app.add_handler(CommandHandler("users", admin_check_users))[cite: 2]
-    app.add_handler(CommandHandler("setqr", admin_set_qr_cmd))[cite: 1, 2]
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))[cite: 1, 2]
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_code))
     app.add_handler(CallbackQueryHandler(handle_callback))
