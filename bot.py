@@ -8,9 +8,9 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
 
 # ================= ការកំណត់របស់អ្នក (Config) =================
-BOT_TOKEN = "8249755354:AAHkrWuCaZN1OMTl8GkAADomLkCoxyBAuX0"[cite: 1, 2]
-ADMIN_ID = 8384547912[cite: 1, 2]
-ADMIN_USERNAME = "@KinHav12"[cite: 1, 2]
+BOT_TOKEN = "8249755354:AAHkrWuCaZN1OMTl8GkAADomLkCoxyBAuX0"
+ADMIN_ID = 8384547912
+ADMIN_USERNAME = "@KinHav12"
 ADMIN_CONTACT_LINK = "https://t.me/KinHav12"
 # =========================================================
 
@@ -22,81 +22,80 @@ PACKAGES = {
     "plan_730": {"name": "២ ឆ្នាំ", "days": 730, "price": "20$", "qr": "qr_2y.jpg"},
 }
 
-# Web Server តូចមួយសម្រាប់ឆ្លើយតប Health Check របស់ Render
+# Web Server សម្រាប់ឆ្លើយតប Render Web Service Port
 class SimpleHealthCheckHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
         self.send_header('Content-type', 'text/html; charset=utf-8')
         self.end_headers()
-        self.wfile.write(b"Bot is alive and running 24/7!")
+        self.wfile.write(b"Bot is alive and running!")
 
     def log_message(self, format, *args):
-        return  # បិទ Log កុំឱ្យចង្អៀតផ្ទាំង Render
+        return
 
 def run_web_server():
     port = int(os.environ.get("PORT", 10000))
     server = HTTPServer(("0.0.0.0", port), SimpleHealthCheckHandler)
-    print(f"Web server កំពុងដំណើរការលើ Port {port} សម្រាប់ Render Health Check...")
     server.serve_forever()
 
 def init_db():
-    conn = sqlite3.connect("subscribers.db")[cite: 1, 2]
-    cursor = conn.cursor()[cite: 1, 2]
+    conn = sqlite3.connect("subscribers.db")
+    cursor = conn.cursor()
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS users (
             user_id INTEGER PRIMARY KEY,
             expire_date TEXT,
             has_used_trial INTEGER DEFAULT 0
         )
-    """)[cite: 1, 2]
-    conn.commit()[cite: 1, 2]
-    conn.close()[cite: 1, 2]
+    """)
+    conn.commit()
+    conn.close()
 
 def record_user(user_id: int):
-    conn = sqlite3.connect("subscribers.db")[cite: 2]
-    cursor = conn.cursor()[cite: 2]
+    conn = sqlite3.connect("subscribers.db")
+    cursor = conn.cursor()
     cursor.execute("""
         INSERT OR IGNORE INTO users (user_id, expire_date, has_used_trial)
         VALUES (?, NULL, 0)
-    """, (user_id,))[cite: 2]
-    conn.commit()[cite: 2]
-    conn.close()[cite: 2]
+    """, (user_id,))
+    conn.commit()
+    conn.close()
 
 def is_vip(user_id: int) -> bool:
-    if user_id == ADMIN_ID:[cite: 1, 2]
-        return True[cite: 1, 2]
-    conn = sqlite3.connect("subscribers.db")[cite: 1, 2]
-    cursor = conn.cursor()[cite: 1, 2]
-    cursor.execute("SELECT expire_date FROM users WHERE user_id = ?", (user_id,))[cite: 1, 2]
-    row = cursor.fetchone()[cite: 1, 2]
-    conn.close()[cite: 1, 2]
+    if user_id == ADMIN_ID:
+        return True
+    conn = sqlite3.connect("subscribers.db")
+    cursor = conn.cursor()
+    cursor.execute("SELECT expire_date FROM users WHERE user_id = ?", (user_id,))
+    row = cursor.fetchone()
+    conn.close()
 
-    if not row or not row[0]:[cite: 2]
-        return False[cite: 1, 2]
-    expire_date = datetime.strptime(row[0], "%Y-%m-%d %H:%M:%S")[cite: 1, 2]
-    return datetime.now() < expire_date[cite: 1, 2]
+    if not row or not row[0]:
+        return False
+    expire_date = datetime.strptime(row[0], "%Y-%m-%d %H:%M:%S")
+    return datetime.now() < expire_date
 
 def add_vip(user_id: int, days: int):
-    conn = sqlite3.connect("subscribers.db")[cite: 1, 2]
-    cursor = conn.cursor()[cite: 1, 2]
-    cursor.execute("SELECT expire_date FROM users WHERE user_id = ?", (user_id,))[cite: 1, 2]
-    row = cursor.fetchone()[cite: 1, 2]
+    conn = sqlite3.connect("subscribers.db")
+    cursor = conn.cursor()
+    cursor.execute("SELECT expire_date FROM users WHERE user_id = ?", (user_id,))
+    row = cursor.fetchone()
 
-    now = datetime.now()[cite: 1, 2]
-    if row and row[0]:[cite: 2]
-        current_expire = datetime.strptime(row[0], "%Y-%m-%d %H:%M:%S")[cite: 1, 2]
-        start_from = current_expire if current_expire > now else now[cite: 1, 2]
+    now = datetime.now()
+    if row and row[0]:
+        current_expire = datetime.strptime(row[0], "%Y-%m-%d %H:%M:%S")
+        start_from = current_expire if current_expire > now else now
     else:
-        start_from = now[cite: 1, 2]
+        start_from = now
 
-    new_expire = start_from + timedelta(days=days)[cite: 1, 2]
+    new_expire = start_from + timedelta(days=days)
     cursor.execute("""
         INSERT INTO users (user_id, expire_date) 
         VALUES (?, ?) 
         ON CONFLICT(user_id) DO UPDATE SET expire_date=excluded.expire_date
-    """, (user_id, new_expire.strftime("%Y-%m-%d %H:%M:%S")))[cite: 1, 2]
-    conn.commit()[cite: 1, 2]
-    conn.close()[cite: 1, 2]
+    """, (user_id, new_expire.strftime("%Y-%m-%d %H:%M:%S")))
+    conn.commit()
+    conn.close()
     return new_expire.strftime("%Y-%m-%d %H:%M")
 
 def claim_free_trial(user_id: int):
@@ -123,28 +122,28 @@ def claim_free_trial(user_id: int):
     return True, expire_date.strftime("%Y-%m-%d %H:%M")
 
 def get_user_stats():
-    conn = sqlite3.connect("subscribers.db")[cite: 2]
-    cursor = conn.cursor()[cite: 2]
-    cursor.execute("SELECT COUNT(*) FROM users")[cite: 2]
-    total_users = cursor.fetchone()[0][cite: 2]
+    conn = sqlite3.connect("subscribers.db")
+    cursor = conn.cursor()
+    cursor.execute("SELECT COUNT(*) FROM users")
+    total_users = cursor.fetchone()[0]
     
-    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")[cite: 2]
-    cursor.execute("SELECT COUNT(*) FROM users WHERE expire_date > ?", (now_str,))[cite: 2]
-    active_vip = cursor.fetchone()[0][cite: 2]
-    conn.close()[cite: 2]
-    return total_users, active_vip[cite: 2]
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    cursor.execute("SELECT COUNT(*) FROM users WHERE expire_date > ?", (now_str,))
+    active_vip = cursor.fetchone()[0]
+    conn.close()
+    return total_users, active_vip
 
 def execute_code(language: str, code: str) -> str:
-    url = "https://emkc.org/api/v2/piston/execute"[cite: 1, 2]
+    url = "https://emkc.org/api/v2/piston/execute"
     payload = {
-        "language": language,[cite: 1, 2]
-        "version": "*",[cite: 1, 2]
-        "files": [{"content": code}][cite: 1, 2]
+        "language": language,
+        "version": "*",
+        "files": [{"content": code}]
     }
     try:
-        res = requests.post(url, json=payload, timeout=20)[cite: 1, 2]
-        data = res.json()[cite: 1, 2]
-        output = data.get("run", {}).get("output", "")[cite: 1, 2]
+        res = requests.post(url, json=payload, timeout=20)
+        data = res.json()
+        output = data.get("run", {}).get("output", "")
         return output if output else "កូដដំណើរការជោគជ័យ (គ្មានលទ្ធផលបង្ហាញ)"
     except Exception as e:
         return f"កំហុសបច្ចេកទេស៖ {str(e)}"
@@ -167,31 +166,31 @@ async def send_plan_selection(update: Update, user_id: int):
         "✨ លោកអ្នកអាចចុច **សាកល្បងឥតគិតថ្លៃ ១ ថ្ងៃ** ឬជ្រើសរើសកញ្ចប់បង់ប្រាក់ខាងក្រោម ដើម្បីដំណើរការកូដ៖"
     )
     if update.message:
-        await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")[cite: 2]
+        await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
     elif update.callback_query:
-        await update.callback_query.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")[cite: 2]
+        await update.callback_query.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id[cite: 1, 2]
-    record_user(user_id)[cite: 2]
+    user_id = update.effective_user.id
+    record_user(user_id)
     
-    if is_vip(user_id):[cite: 1, 2]
+    if is_vip(user_id):
         await update.message.reply_text(
             "👋 **សូមស្វាគមន៍មកកាន់ប្រព័ន្ធដំណើរការកូដ!**\n\n"
             "លោកអ្នកជាសមាជិក VIP រួចរាល់ហើយ។ សូមផ្ញើកូដដែលអ្នកចង់ដំណើរការមកកាន់ទីនេះ (Python, JavaScript, PHP, C++, Java, C#...)",
             parse_mode="Markdown"
         )
     else:
-        await send_plan_selection(update, user_id)[cite: 2]
+        await send_plan_selection(update, user_id)
 
 async def handle_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id[cite: 1, 2]
-    record_user(user_id)[cite: 2]
-    if not is_vip(user_id):[cite: 1, 2]
-        await send_plan_selection(update, user_id)[cite: 2]
-        return[cite: 1, 2]
+    user_id = update.effective_user.id
+    record_user(user_id)
+    if not is_vip(user_id):
+        await send_plan_selection(update, user_id)
+        return
 
-    context.user_data['code'] = update.message.text[cite: 1, 2]
+    context.user_data['code'] = update.message.text
 
     keyboard = [
         [
@@ -207,9 +206,9 @@ async def handle_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user[cite: 1, 2]
-    record_user(user.id)[cite: 2]
-    photo = update.message.photo[-1][cite: 1, 2]
+    user = update.effective_user
+    record_user(user.id)
+    photo = update.message.photo[-1]
     selected_plan = context.user_data.get("selected_plan", "មិនបានបញ្ជាក់")
 
     admin_keyboard = [
@@ -225,8 +224,8 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
 
     await context.bot.send_photo(
-        chat_id=ADMIN_ID,[cite: 1, 2]
-        photo=photo.file_id,[cite: 1, 2]
+        chat_id=ADMIN_ID,
+        photo=photo.file_id,
         caption=(
             f"🔔 **មានភ្ញៀវផ្ញើវិក្កយបត្របង់ប្រាក់ថ្មី!**\n\n"
             f"👤 **ឈ្មោះភ្ញៀវ៖** {user.full_name}\n"
@@ -235,17 +234,17 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"📌 **កញ្ចប់ដែលបានជ្រើសរើស៖** {selected_plan}\n\n"
             "សូមអេដមីនពិនិត្យមើលរូបភាពវិក្កយបត្រ រួចចុចប៊ូតុងខាងក្រោមដើម្បីអនុម័ត៖"
         ),
-        parse_mode="Markdown",[cite: 1, 2]
-        reply_markup=InlineKeyboardMarkup(admin_keyboard)[cite: 1, 2]
+        parse_mode="Markdown",
+        reply_markup=InlineKeyboardMarkup(admin_keyboard)
     )
 
     await update.message.reply_text("⏳ **ទទួលបានរូបភាពវិក្កយបត្ររបស់អ្នករួចរាល់ហើយ!**\nសូមរង់ចាំអេដមីនពិនិត្យ និងបើកសិទ្ធិជូនក្នុងពេលបន្តិចទៀតនេះ...")
 
 async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query[cite: 1, 2]
-    data = query.data[cite: 1, 2]
-    user_id = update.effective_user.id[cite: 1, 2]
-    await query.answer()[cite: 1, 2]
+    query = update.callback_query
+    data = query.data
+    user_id = update.effective_user.id
+    await query.answer()
 
     if data == "claim_free_trial":
         success, expire_time = claim_free_trial(user_id)
@@ -261,13 +260,13 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "⚠️ **លោកអ្នកធ្លាប់បានប្រើប្រាស់កញ្ចប់ Free ១ ថ្ងៃរួចរាល់ហើយ!**\n\n"
                 "សូមធ្វើការជ្រើសរើសកញ្ចប់បង់ប្រាក់ ដើម្បីបន្តការដំណើរការកូដ។"
             )
-            await send_plan_selection(update, user_id)[cite: 2]
+            await send_plan_selection(update, user_id)
         return
 
-    if data.startswith("buy_"):[cite: 2]
-        plan_key = data.replace("buy_", "")[cite: 2]
-        plan = PACKAGES.get(plan_key)[cite: 2]
-        if plan:[cite: 2]
+    if data.startswith("buy_"):
+        plan_key = data.replace("buy_", "")
+        plan = PACKAGES.get(plan_key)
+        if plan:
             context.user_data["selected_plan"] = f"កញ្ចប់ {plan['name']} (តម្លៃ {plan['price']})"
             caption = (
                 f"🧾 **លោកអ្នកបានជ្រើសរើស៖ កញ្ចប់ {plan['name']}**\n"
@@ -279,58 +278,58 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             keyboard = [[InlineKeyboardButton("💬 ទំនាក់ទំនងអេដមីនផ្ទាល់", url=ADMIN_CONTACT_LINK)]]
             reply_markup = InlineKeyboardMarkup(keyboard)
-            chat_id = query.message.chat_id[cite: 2]
+            chat_id = query.message.chat_id
             qr_file = plan["qr"]
 
             if os.path.exists(qr_file):
                 with open(qr_file, "rb") as photo:
                     await context.bot.send_photo(chat_id=chat_id, photo=photo, caption=caption, parse_mode="Markdown", reply_markup=reply_markup)
             else:
-                await context.bot.send_message(chat_id=chat_id, text=caption, parse_mode="Markdown", reply_markup=reply_markup)[cite: 2]
-        return[cite: 2]
+                await context.bot.send_message(chat_id=chat_id, text=caption, parse_mode="Markdown", reply_markup=reply_markup)
+        return
 
-    if data.startswith("adm_"):[cite: 1, 2]
-        if user_id != ADMIN_ID:[cite: 1, 2]
-            await query.answer("អ្នកមិនមែនជាអេដមីនទេ!", show_alert=True)[cite: 1, 2]
-            return[cite: 1, 2]
+    if data.startswith("adm_"):
+        if user_id != ADMIN_ID:
+            await query.answer("អ្នកមិនមែនជាអេដមីនទេ!", show_alert=True)
+            return
 
-        parts = data.split("_")[cite: 1, 2]
-        action = parts[1][cite: 1, 2]
-        target_id = int(parts[2])[cite: 1, 2]
-        days = int(parts[3])[cite: 1, 2]
+        parts = data.split("_")
+        action = parts[1]
+        target_id = int(parts[2])
+        days = int(parts[3])
 
-        if action == "approve":[cite: 1, 2]
-            expire_date = add_vip(target_id, days)[cite: 1, 2]
+        if action == "approve":
+            expire_date = add_vip(target_id, days)
             await query.edit_message_caption(
                 caption=query.message.caption + f"\n\n🟢 **បានយល់ព្រម (Approve) រយៈពេល {days} ថ្ងៃ! ផុតកំណត់នៅថ្ងៃ៖ {expire_date}**",
-                reply_markup=None[cite: 1, 2]
+                reply_markup=None
             )
             try:
                 await context.bot.send_message(
-                    chat_id=target_id,[cite: 1, 2]
+                    chat_id=target_id,
                     text=f"🎉 **ការទូទាត់ប្រាក់របស់អ្នកត្រូវបានអេដមីនយល់ព្រមជោគជ័យ!**\n\n"
                          f"⏳ **កញ្ចប់សេវាកម្ម៖** {days} ថ្ងៃ\n"
                          f"📅 **ផុតកំណត់នៅថ្ងៃ៖** {expire_date}\n\n"
                          "ឥឡូវនេះ លោកអ្នកអាចផ្ញើកូដមកដំណើរការបានដោយសេរី!",
-                    parse_mode="Markdown"[cite: 1, 2]
+                    parse_mode="Markdown"
                 )
-            except Exception:[cite: 1, 2]
-                pass[cite: 1, 2]
+            except Exception:
+                pass
 
-        elif action == "reject":[cite: 1, 2]
+        elif action == "reject":
             await query.edit_message_caption(
                 caption=query.message.caption + "\n\n🔴 **បានបដិសេធ / បោះបង់ការទូទាត់នេះ**",
-                reply_markup=None[cite: 1, 2]
+                reply_markup=None
             )
             try:
                 await context.bot.send_message(
-                    chat_id=target_id,[cite: 1, 2]
+                    chat_id=target_id,
                     text="❌ **ការទូទាត់ប្រាក់របស់អ្នកត្រូវបានបដិសេធ!**\n"
                          f"សូមពិនិត្យមើលវិក្កយបត្រឡើងវិញ ឬទាក់ទងមកកាន់អេដមីនផ្ទាល់៖ {ADMIN_USERNAME}"
                 )
-            except Exception:[cite: 1, 2]
-                pass[cite: 1, 2]
-        return[cite: 1, 2]
+            except Exception:
+                pass
+        return
 
     if data == "action_stop_code":
         context.user_data.pop('code', None)
@@ -338,22 +337,22 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if data == "action_run_code":
-        if not is_vip(user_id):[cite: 1, 2]
+        if not is_vip(user_id):
             await query.edit_message_text("⚠️ **សមាជិកភាពរបស់អ្នកបានផុតកំណត់ហើយ!**\nសូមទាក់ទងអេដមីន ឬជ្រើសរើសកញ្ចប់ថ្មី។")
-            return[cite: 1, 2]
+            return
 
         lang_keyboard = [
             [
-                InlineKeyboardButton("🐍 Python", callback_data="run_python"),[cite: 1, 2]
-                InlineKeyboardButton("🟨 JavaScript", callback_data="run_javascript")[cite: 1, 2]
+                InlineKeyboardButton("🐍 Python", callback_data="run_python"),
+                InlineKeyboardButton("🟨 JavaScript", callback_data="run_javascript")
             ],
             [
-                InlineKeyboardButton("🐘 PHP", callback_data="run_php"),[cite: 1, 2]
-                InlineKeyboardButton("⚡ C++", callback_data="run_cpp")[cite: 1, 2]
+                InlineKeyboardButton("🐘 PHP", callback_data="run_php"),
+                InlineKeyboardButton("⚡ C++", callback_data="run_cpp")
             ],
             [
-                InlineKeyboardButton("☕ Java", callback_data="run_java"),[cite: 1, 2]
-                InlineKeyboardButton("🔷 C#", callback_data="run_csharp")[cite: 1, 2]
+                InlineKeyboardButton("☕ Java", callback_data="run_java"),
+                InlineKeyboardButton("🔷 C#", callback_data="run_csharp")
             ],
             [InlineKeyboardButton("⏹️ បញ្ឈប់ / បោះបង់", callback_data="action_stop_code")]
         ]
@@ -364,26 +363,26 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    if data.startswith("run_"):[cite: 1, 2]
-        if not is_vip(user_id):[cite: 1, 2]
+    if data.startswith("run_"):
+        if not is_vip(user_id):
             await query.edit_message_text("⚠️ **សមាជិកភាពរបស់អ្នកបានផុតកំណត់ហើយ!**")
-            return[cite: 1, 2]
+            return
 
-        lang = data.replace("run_", "")[cite: 1, 2]
-        code = context.user_data.get('code')[cite: 1, 2]
+        lang = data.replace("run_", "")
+        code = context.user_data.get('code')
 
-        if not code:[cite: 1, 2]
+        if not code:
             await query.edit_message_text("⚠️ **មិនមានកូដក្នុងប្រព័ន្ធទេ សូមផ្ញើកូដឡើងវិញ។**")
-            return[cite: 1, 2]
+            return
 
         await query.edit_message_text(f"⏳ កំពុងដំណើរការកូដជាភាសា `{lang}`...", parse_mode="Markdown")
-        output = execute_code(lang, code)[cite: 1, 2]
+        output = execute_code(lang, code)
 
-        if len(output) > 3500:[cite: 1, 2]
+        if len(output) > 3500:
             output = output[:3500] + "\n...[កាត់បន្ថយដោយសារលទ្ធផលវែងពេក]"
 
-        user_name = query.from_user.full_name[cite: 1, 2]
-        username = f"(@{query.from_user.username})" if query.from_user.username else ""[cite: 1, 2]
+        user_name = query.from_user.full_name
+        username = f"(@{query.from_user.username})" if query.from_user.username else ""
 
         result_text = (
             f"💻 **លទ្ធផលដំណើរការកូដ**\n"
@@ -393,14 +392,14 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"**📄 លទ្ធផល Output៖**\n"
             f"```\n{output}\n```"
         )
-        await query.message.reply_text(result_text, parse_mode="Markdown")[cite: 1, 2]
+        await query.message.reply_text(result_text, parse_mode="Markdown")
 
 async def admin_check_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != ADMIN_ID:[cite: 2]
-        return[cite: 2]
+    if update.effective_user.id != ADMIN_ID:
+        return
     
-    total, active = get_user_stats()[cite: 2]
-    expired = total - active[cite: 2]
+    total, active = get_user_stats()
+    expired = total - active
     
     msg = (
         "📊 **ស្ថិតិអ្នកប្រើប្រាស់ Bot ទាំងអស់**\n\n"
@@ -408,22 +407,20 @@ async def admin_check_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"🟢 សមាជិក VIP កំពុងដំណើរការ៖ **{active}** នាក់\n"
         f"⚪ សមាជិកធម្មតា / ផុតកំណត់៖ **{expired}** នាក់"
     )
-    await update.message.reply_text(msg, parse_mode="Markdown")[cite: 2]
+    await update.message.reply_text(msg, parse_mode="Markdown")
 
 if __name__ == "__main__":
-    init_db()[cite: 1, 2]
+    init_db()
     
-    # ចាប់ផ្ដើម Web Server លើ Thread ដាច់ដោយឡែកសម្រាប់ឆ្លើយតប Render Web Service
     web_thread = threading.Thread(target=run_web_server, daemon=True)
     web_thread.start()
 
-    # ចាប់ផ្ដើមដំណើរការ Telegram Bot
-    app = ApplicationBuilder().token(BOT_TOKEN).build()[cite: 1, 2]
-    app.add_handler(CommandHandler("start", start))[cite: 1, 2]
-    app.add_handler(CommandHandler("users", admin_check_users))[cite: 2]
-    app.add_handler(MessageHandler(filters.PHOTO, handle_photo))[cite: 1, 2]
+    app = ApplicationBuilder().token(BOT_TOKEN).build()
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("users", admin_check_users))
+    app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_code))
     app.add_handler(CallbackQueryHandler(handle_callback))
 
-    print("Bot កំពុងដំណើរការ...")[cite: 1, 2]
-    app.run_polling()[cite: 1, 2]
+    print("Bot កំពុងដំណើរការ...")
+    app.run_polling()
